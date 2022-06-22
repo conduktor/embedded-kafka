@@ -1,8 +1,8 @@
 package io.github.embeddedkafka
 
 import java.nio.file.{Files, Path}
-
 import io.github.embeddedkafka.ops._
+import org.apache.kafka.common.security.auth.SecurityProtocol
 
 import scala.reflect.io.Directory
 
@@ -26,18 +26,25 @@ trait EmbeddedKafka
   )(body: EmbeddedKafkaConfig => T): T = {
     val broker =
       startKafka(
-        config.kafkaPort,
-        actualZkPort,
-        config.customBrokerProperties,
-        kafkaLogsDir
+        kafkaPort = config.kafkaPort,
+        kafkaSslPort = config.kafkaSslPort,
+        kafkaSaslPlainTextPort = config.kafkaSaslPlainTextPort,
+        kafkaSaslSslPort = config.kafkaSaslSslPort,
+        zooKeeperPort = actualZkPort,
+        customBrokerProperties = config.customBrokerProperties,
+        kafkaLogDir = kafkaLogsDir
       )
 
+    val ports = EmbeddedKafka.kafkaPort(broker)
     val configWithUsedPorts = EmbeddedKafkaConfig(
-      EmbeddedKafka.kafkaPort(broker),
-      actualZkPort,
-      config.customBrokerProperties,
-      config.customProducerProperties,
-      config.customConsumerProperties
+      kafkaPort = ports(SecurityProtocol.PLAINTEXT),
+      kafkaSslPort = ports.get(SecurityProtocol.SSL),
+      kafkaSaslSslPort = ports.get(SecurityProtocol.SASL_SSL),
+      kafkaSaslPlainTextPort = ports.get(SecurityProtocol.SASL_PLAINTEXT),
+      zooKeeperPort = actualZkPort,
+      customBrokerProperties = config.customBrokerProperties,
+      customProducerProperties = config.customProducerProperties,
+      customConsumerProperties = config.customConsumerProperties
     )
 
     try {
@@ -60,11 +67,14 @@ object EmbeddedKafka
       EmbeddedZ(startZooKeeper(config.zooKeeperPort, zkLogsDir), zkLogsDir)
 
     val configWithUsedPorts = EmbeddedKafkaConfig(
-      config.kafkaPort,
-      zookeeperPort(factory),
-      config.customBrokerProperties,
-      config.customProducerProperties,
-      config.customConsumerProperties
+      kafkaPort = config.kafkaPort,
+      zooKeeperPort = zookeeperPort(factory),
+      kafkaSslPort = config.kafkaSslPort,
+      kafkaSaslPlainTextPort = config.kafkaSaslPlainTextPort,
+      kafkaSaslSslPort = config.kafkaSaslPlainTextPort,
+      customBrokerProperties = config.customBrokerProperties,
+      customProducerProperties = config.customProducerProperties,
+      customConsumerProperties = config.customConsumerProperties
     )
 
     startKafka(kafkaLogsDir, Option(factory))(configWithUsedPorts)

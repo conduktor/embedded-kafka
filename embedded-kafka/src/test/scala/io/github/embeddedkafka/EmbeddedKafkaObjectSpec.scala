@@ -1,7 +1,6 @@
 package io.github.embeddedkafka
 
 import java.nio.file.Files
-
 import org.apache.kafka.common.serialization.{
   StringDeserializer,
   StringSerializer
@@ -12,6 +11,7 @@ import io.github.embeddedkafka.EmbeddedKafkaConfig.{
   defaultZookeeperPort
 }
 import io.github.embeddedkafka.EmbeddedKafkaSpecSupport._
+import org.apache.kafka.common.security.auth.SecurityProtocol
 import org.scalatest.OptionValues
 
 import scala.jdk.CollectionConverters._
@@ -80,17 +80,18 @@ class EmbeddedKafkaObjectSpec
         kafka.factory shouldBe defined
 
         val usedZookeeperPort = EmbeddedKafka.zookeeperPort(kafka.factory.get)
-        val usedKafkaPort     = EmbeddedKafka.kafkaPort(kafka.broker)
+        val usedPlainTextKafkaPort =
+          EmbeddedKafka.kafkaPort(kafka.broker)(SecurityProtocol.PLAINTEXT)
 
-        expectedServerStatus(usedKafkaPort, Available)
+        expectedServerStatus(usedPlainTextKafkaPort, Available)
         expectedServerStatus(usedZookeeperPort, Available)
 
-        kafka.config.kafkaPort should be(usedKafkaPort)
+        kafka.config.kafkaPort should be(usedPlainTextKafkaPort)
         kafka.config.zooKeeperPort should be(usedZookeeperPort)
 
         EmbeddedKafka.stop()
 
-        expectedServerStatus(usedKafkaPort, NotAvailable)
+        expectedServerStatus(usedPlainTextKafkaPort, NotAvailable)
         expectedServerStatus(usedZookeeperPort, NotAvailable)
       }
 
