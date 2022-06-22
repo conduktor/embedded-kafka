@@ -24,11 +24,24 @@ trait KafkaOps {
   private[embeddedkafka] def startKafka(
       kafkaPort: Int,
       zooKeeperPort: Int,
+      kafkaSslPort: Option[Int],
+      kafkaSaslPlainTextPort: Option[Int],
+      kafkaSaslSslPort: Option[Int],
       customBrokerProperties: Map[String, String],
       kafkaLogDir: Path
   ) = {
     val zkAddress = s"localhost:$zooKeeperPort"
-    val listener  = s"${SecurityProtocol.PLAINTEXT}://localhost:$kafkaPort"
+    val listener = Map(
+      SecurityProtocol.PLAINTEXT      -> Some(kafkaPort),
+      SecurityProtocol.SASL_SSL       -> kafkaSaslSslPort,
+      SecurityProtocol.SASL_PLAINTEXT -> kafkaSaslPlainTextPort,
+      SecurityProtocol.SSL            -> kafkaSslPort
+    ).flatMap {
+      case (protocol, Some(port)) =>
+        Some(s"$protocol://localhost:$port")
+      case (_, None) =>
+        None
+    }.mkString(",")
 
     val brokerProperties = Map[String, Object](
       KafkaConfig.ZkConnectProp              -> zkAddress,
@@ -76,18 +89,26 @@ trait RunningKafkaOps {
       implicit config: EmbeddedKafkaConfig
   ): EmbeddedK = {
     val kafkaServer = startKafka(
-      config.kafkaPort,
-      config.zooKeeperPort,
-      config.customBrokerProperties,
-      kafkaLogsDir
+      kafkaPort = config.kafkaPort,
+      kafkaSslPort = config.kafkaSslPort,
+      kafkaSaslPlainTextPort = config.kafkaSaslPlainTextPort,
+      kafkaSaslSslPort = config.kafkaSaslSslPort,
+      zooKeeperPort = config.zooKeeperPort,
+      customBrokerProperties = config.customBrokerProperties,
+      kafkaLogDir = kafkaLogsDir
     )
 
+    val listenedPort = kafkaPort(kafkaServer)
     val configWithUsedPorts = EmbeddedKafkaConfig(
-      kafkaPort(kafkaServer),
-      config.zooKeeperPort,
-      config.customBrokerProperties,
-      config.customProducerProperties,
-      config.customConsumerProperties
+      kafkaPort = listenedPort(SecurityProtocol.PLAINTEXT),
+      kafkaSslPort = listenedPort.get(SecurityProtocol.SSL),
+      kafkaSaslSslPort = listenedPort.get(SecurityProtocol.SASL_SSL),
+      kafkaSaslPlainTextPort =
+        listenedPort.get(SecurityProtocol.SASL_PLAINTEXT),
+      zooKeeperPort = config.zooKeeperPort,
+      customBrokerProperties = config.customBrokerProperties,
+      customConsumerProperties = config.customProducerProperties,
+      customProducerProperties = config.customConsumerProperties
     )
 
     val broker =
@@ -105,6 +126,11 @@ trait RunningKafkaOps {
   private[embeddedkafka] def isEmbeddedK(server: EmbeddedServer): Boolean =
     server.isInstanceOf[EmbeddedK]
 
-  private[embeddedkafka] def kafkaPort(kafkaServer: KafkaServer): Int =
-    kafkaServer.boundPort(kafkaServer.config.listeners.head.listenerName)
+  private[embeddedkafka] def kafkaPort(
+      kafkaServer: KafkaServer
+  ): Map[SecurityProtocol, Int] = {
+    kafkaServer.config.listeners.map { endpoint =>
+      endpoint.securityProtocol -> kafkaServer.boundPort(endpoint.listenerName)
+    }.toMap
+  }
 }
